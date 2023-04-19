@@ -904,7 +904,7 @@ int handle_seek(int i_num, int offset, int whence, int cur_pos)
     // check if the given cur_pos is valid
     if (cur_pos > size || cur_pos < 0)
     {
-        TracePrintf(2, "handle_seek: invalid current position (%d)\n", cur_pos);
+        TracePrintf(2, "handle_seek: invalid current pos (%d)\n", cur_pos);
         return ERROR;
     }
     if (whence == SEEK_SET)
@@ -915,23 +915,23 @@ int handle_seek(int i_num, int offset, int whence, int cur_pos)
             TracePrintf(2, "handle_seek: invalid offset (%d) for SEEK_SET\n", offset);
             return ERROR;
         }
-        // calculate the new position and return it
+        // calculate the new pos and return it
         int new_pos = offset;
-        TracePrintf(2, "handle_seek: moved to SEEK_SET position %d\n", new_pos);
+        TracePrintf(2, "handle_seek: moved to SEEK_SET pos %d\n", new_pos);
         return new_pos;
     }
     if (whence == SEEK_CUR)
     {
         int new_pos = cur_pos + offset;
 
-        // check if the new position is valid
+        // check if the new pos is valid
         if (new_pos > size || new_pos < 0)
         {
-            TracePrintf(2, "handle_seek: invalid new position (%d) for SEEK_CUR\n", new_pos);
+            TracePrintf(2, "handle_seek: invalid new pos (%d) for SEEK_CUR\n", new_pos);
             return ERROR;
         }
 
-        TracePrintf(2, "handle_seek: moved to SEEK_CUR position %d\n", new_pos);
+        TracePrintf(2, "handle_seek: moved to SEEK_CUR pos %d\n", new_pos);
         return new_pos;
     }
 
@@ -939,14 +939,14 @@ int handle_seek(int i_num, int offset, int whence, int cur_pos)
     {
         int new_pos = size + offset;
 
-        // check if the new position is valid
+        // check if the new pos is valid
         if (offset > 0 || new_pos < 0)
         {
-            TracePrintf(2, "handle_seek: invalid new position (%d) for SEEK_END\n", new_pos);
+            TracePrintf(2, "handle_seek: invalid new pos (%d) for SEEK_END\n", new_pos);
             return ERROR;
         }
 
-        TracePrintf(2, "handle_seek: moved to SEEK_END position %d\n", new_pos);
+        TracePrintf(2, "handle_seek: moved to SEEK_END pos %d\n", new_pos);
         return new_pos;
     }
 
@@ -1006,29 +1006,6 @@ int handle_sync(void)
 
 
 /** HASH TABLE HELPER BEGIN */
-struct ht *
-init_ht(double load_factor, int size)
-{
-    struct ht *ht;
-
-    assert(load_factor > 0.0);
-    ht = malloc(sizeof(struct ht));
-    if (ht == NULL)
-    {
-        return (NULL);
-    }
-
-    ht->head = calloc(size, sizeof(ht_map *));
-    if (ht->head == NULL)
-    {
-        free(ht);
-        return (NULL);
-    }
-    ht->size = size;
-    ht->num_used = 0;
-    ht->load_factor = load_factor;
-    return (ht);
-}
 
 int insert_ht(struct ht *ht, int key, void *value)
 {
@@ -1198,10 +1175,10 @@ void evict_b()
     // Free the memory occupied by the LRU block item
 
     cache_item *lrub_tmp = left_dequeue(cache_b_queue);
-    int lrub_num = lrub_tmp->c_item_num;
-    WriteSector(lrub_num, lrub_tmp->addr);
+    int lru_b_num = lrub_tmp->c_item_num;
+    WriteSector(lru_b_num, lrub_tmp->addr);
     cache_b_size--;
-    evict_ht(b_ht, lrub_num);
+    evict_ht(b_ht, lru_b_num);
 
     // Free the memory occupied by the LRU block item
     free(lrub_tmp->addr);
@@ -1214,7 +1191,7 @@ void *get_b(int b_num)
     // find block in hash table
     cache_item *b_tmp = (cache_item *)query_ht(b_ht, b_num);
 
-    // if block is found, update position to end of queue
+    // if block is found, update pos to end of queue
     if (b_tmp != NULL)
     {
         right_dequeue(cache_b_queue, b_tmp);
@@ -1233,13 +1210,13 @@ void *get_b(int b_num)
     ReadSector(b_num, block);
 
     // create a new cache item to add to the LRU cache
-    cache_item *newItem = malloc(sizeof(cache_item));
-    newItem->c_item_num = b_num;
-    newItem->addr = block;
-    newItem->dirty = false;
-    right_enqueue(newItem, cache_b_queue);
+    cache_item *c_tmp = malloc(sizeof(cache_item));
+    c_tmp->c_item_num = b_num;
+    c_tmp->addr = block;
+    c_tmp->dirty = false;
+    right_enqueue(c_tmp, cache_b_queue);
     cache_b_size++;
-    insert_ht(b_ht, b_num, newItem);
+    insert_ht(b_ht, b_num, c_tmp);
 
     return block;
 }
@@ -1247,37 +1224,37 @@ void *get_b(int b_num)
 // evict the LRU inode from the cache
 void evict_i()
 {
-    cache_item *lruInode = left_dequeue(cache_i_queue);
-    int lrui_num = lruInode->c_item_num;
+    cache_item *lru_i = left_dequeue(cache_i_queue);
+    int lru_i_num = lru_i->c_item_num;
     cache_i_size--;
-    evict_ht(i_ht, lrui_num);
+    evict_ht(i_ht, lru_i_num);
 
     // write the evicted inode back to its block
-    int lrub_num = (lrui_num / (BLOCKSIZE / INODESIZE)) + 1;
-    void *lruBlock = get_b(lrub_num);
-    void *i_block_addr = (lruBlock + (lrui_num - (lrub_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
-    memcpy(i_block_addr, lruInode->addr, sizeof(struct inode));
+    int lru_b_num = (lru_i_num / (BLOCKSIZE / INODESIZE)) + 1;
+    void *lru_b = get_b(lru_b_num);
+    void *i_block_addr = (lru_b + (lru_i_num - (lru_b_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
+    memcpy(i_block_addr, lru_i->addr, sizeof(struct inode));
 
     // mark block as dirty
-    cache_item *tmpb_tmp = (cache_item *)query_ht(b_ht, lrub_num);
+    cache_item *tmpb_tmp = (cache_item *)query_ht(b_ht, lru_b_num);
     tmpb_tmp->dirty = true;
 
     // free the memory occupied by the LRU inode item
-    free(lruInode->addr);
-    free(lruInode);
+    free(lru_i->addr);
+    free(lru_i);
 }
 
 // Get LRU inode from cache
 struct inode *get_i(int i_num)
 {
-    cache_item *nodeItem = (cache_item *)query_ht(i_ht, i_num);
+    cache_item *c_i_tmp = (cache_item *)query_ht(i_ht, i_num);
 
-    // if iniode found, update position to end of queue
-    if (nodeItem != NULL)
+    // if iniode found, update pos to end of queue
+    if (c_i_tmp != NULL)
     {
-        right_dequeue(cache_i_queue, nodeItem);
-        right_enqueue(nodeItem, cache_i_queue);
-        return nodeItem->addr;
+        right_dequeue(cache_i_queue, c_i_tmp);
+        right_enqueue(c_i_tmp, cache_i_queue);
+        return c_i_tmp->addr;
     }
 
     // cache full, evict LRU inode
@@ -1288,14 +1265,14 @@ struct inode *get_i(int i_num)
 
     // read the requested inode from its block
     int b_num = (i_num / (BLOCKSIZE / INODESIZE)) + 1;
-    void *blockAddr = get_b(b_num);
-    struct inode *newi_block_addr = (struct inode *)(blockAddr + (i_num - (b_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
+    void *b_addr = get_b(b_num);
+    struct inode *new_i_b_addr = (struct inode *)(b_addr + (i_num - (b_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
 
     // copy the inode from its block to a new memory location and create a new cache item for it
-    struct inode *inodeCpy = malloc(sizeof(struct inode));
+    struct inode *i_cpy = malloc(sizeof(struct inode));
     struct cache_item *i_tmp = malloc(sizeof(struct cache_item));
-    memcpy(inodeCpy, newi_block_addr, sizeof(struct inode));
-    i_tmp->addr = inodeCpy;
+    memcpy(i_cpy, new_i_b_addr, sizeof(struct inode));
+    i_tmp->addr = i_cpy;
     i_tmp->c_item_num = i_num;
 
     // add the new inode cache item to the LRU queue and the inode hash table
@@ -1309,7 +1286,7 @@ struct inode *get_i(int i_num)
 // get the nth block of an inode. If the block does not exist and allocateIfNeeded is true, allocate a new block.
 int get_nth_b(struct inode *inode, int n, bool allocateIfNeeded)
 {
-    bool isOver = false;
+    bool finish = false;
 
     // check if n exceeds the maximum c_item_num of blocks allowed for an inode
     if (n >= NUM_DIRECT + BLOCKSIZE / (int)sizeof(int))
@@ -1320,11 +1297,11 @@ int get_nth_b(struct inode *inode, int n, bool allocateIfNeeded)
     // check if the requested block is outside the current file size
     if (n * BLOCKSIZE >= inode->size)
     {
-        isOver = true;
+        finish = true;
     }
 
     // if the requested block is outside the current file size and allocation is not needed, return 0
-    if (isOver && !allocateIfNeeded)
+    if (finish && !allocateIfNeeded)
     {
         return 0;
     }
@@ -1333,7 +1310,7 @@ int get_nth_b(struct inode *inode, int n, bool allocateIfNeeded)
     if (n < NUM_DIRECT)
     {
         // if the requested block is outside the current file size, allocate a new block
-        if (isOver)
+        if (finish)
         {
             inode->direct[n] = get_next_free_bnum();
         }
@@ -1342,16 +1319,16 @@ int get_nth_b(struct inode *inode, int n, bool allocateIfNeeded)
 
     // if the requested block is within the indirect block pointers range
     // get the indirect block
-    int *indirectBlock = get_b(inode->indirect);
+    int *b_indir = get_b(inode->indirect);
 
     // if the requested block is outside the current file size, allocate a new block
-    if (isOver)
+    if (finish)
     {
-        indirectBlock[n - NUM_DIRECT] = get_next_free_bnum();
+        b_indir[n - NUM_DIRECT] = get_next_free_bnum();
     }
 
     // get the block c_item_num from the indirect block
-    int b_num = indirectBlock[n - NUM_DIRECT];
+    int b_num = b_indir[n - NUM_DIRECT];
 
     // return the block c_item_num
     return b_num;
@@ -1377,40 +1354,40 @@ char *get_next_path_part(char *path)
 // This function searches for the inode c_item_num of a given path starting from a given inode c_item_num in the file system.
 // It recursively navigates through the directory structure until it finds the inode for the given path.
 
-int get_path_i_num(char *path, int inodeStartNumber)
+int get_path_i_num(char *path, int start_i)
 {
-    int nexti_number = 0;
+    int next_i_num = 0;
     void *block;
-    struct inode *inode = get_i(inodeStartNumber);
+    struct inode *inode = get_i(start_i);
 
     if (inode->type == INODE_DIRECTORY)
     {
         int b_num;
-        int offset = get_dir_entry(path, inodeStartNumber, &b_num, false);
+        int offset = get_dir_entry(path, start_i, &b_num, false);
         if (offset != -1)
         {
             block = get_b(b_num);
             struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
             // set next_inode inode c_item_num to inode c_item_num of the directory entry
-            nexti_number = dir_entry->inum;
+            next_i_num = dir_entry->inum;
         }
     }
-    else if (inode->type == INODE_REGULAR || nexti_number == 0)
+    else if (inode->type == INODE_REGULAR || next_i_num == 0)
     {
         return 0;
     }
 
-    char *nextPath = get_next_path_part(path);
+    char *p_next = get_next_path_part(path);
     // check if we've reached the end of the path
-    if (*nextPath == '\0')
+    if (*p_next == '\0')
     {
-        // get inode pointer using nexti_number
-        inode = get_i(nexti_number);
-        return nexti_number;
+        // get inode pointer using next_i_num
+        inode = get_i(next_i_num);
+        return next_i_num;
     }
 
     // recursively call function with next_inode path segment and next_inode inode c_item_num
-    return get_path_i_num(nextPath, nexti_number);
+    return get_path_i_num(p_next, next_i_num);
 }
 
 // grab the next_inode free inode c_item_num from inode freelist
@@ -1522,9 +1499,9 @@ void make_free_lists()
 
     // init fs header and initialize array of taken blocks
     struct fs_header header = *((struct fs_header *)block);
-    bool takenBlocks[header.num_blocks];
-    memset(takenBlocks, false, header.num_blocks * sizeof(bool));
-    takenBlocks[0] = true;
+    bool used_b_list[header.num_blocks];
+    memset(used_b_list, false, header.num_blocks * sizeof(bool));
+    used_b_list[0] = true;
 
     int i_num = ROOTINODE;
     // loop through all inodes
@@ -1561,15 +1538,15 @@ void make_free_lists()
                     }
                     else
                     {
-                        int *indirectBlock = get_b(inode->indirect);
-                        b_num = indirectBlock[i - NUM_DIRECT];
+                        int *b_indir = get_b(inode->indirect);
+                        b_num = b_indir[i - NUM_DIRECT];
                     }
                     // mark block as taken
                     if (b_num == 0)
                     {
                         break;
                     }
-                    takenBlocks[b_num] = true;
+                    used_b_list[b_num] = true;
                     i++;
                 }
             }
@@ -1583,7 +1560,7 @@ void make_free_lists()
     int i;
     for (i = 0; i < header.num_blocks; i++)
     {
-        if (!takenBlocks[i])
+        if (!used_b_list[i])
         {
             free_block *new_b = malloc(sizeof(free_block));
             new_b->b_num = i;
@@ -1595,70 +1572,70 @@ void make_free_lists()
 }
 
 // This function searches for a directory entry in a given inode for the specified pathname.
-// If createIfNeeded is true and the directory entry is not found, it creates a new directory entry.
+// If should_make_dir is true and the directory entry is not found, it creates a new directory entry.
 
-int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool createIfNeeded)
+int get_dir_entry(char *pathname, int start_i, int *b_numPtr, bool should_make_dir)
 {
     // init variables for loop
-    int freeEntryOffset = -1;
-    int freeEntryb_num = 0;
+    int entry_offset = -1;
+    int entry_b_num = 0;
     void *cur_b;
-    struct dir_entry *currentEntry;
-    struct inode *inode = get_i(inodeStartNumber);
+    struct dir_entry *cur_entry;
+    struct inode *inode = get_i(start_i);
     int i = 0;
     int b_num = get_nth_b(inode, i, false);
-    int currb_num = 0;
-    int totalSize = sizeof(struct dir_entry);
-    bool isFound = false;
+    int curr_b_num  = 0;
+    int total_size = sizeof(struct dir_entry);
+    bool found = false;
 
     // loop through all blocks in inode until the directory entry is found or all blocks have been searched
-    while (b_num != 0 && !isFound)
+    while (b_num != 0 && !found)
     {
         cur_b = get_b(b_num);
-        currentEntry = (struct dir_entry *)cur_b;
-        while (totalSize <= inode->size && ((char *)currentEntry < ((char *)cur_b + BLOCKSIZE)))
+        cur_entry = (struct dir_entry *)cur_b;
+        while (total_size <= inode->size && ((char *)cur_entry < ((char *)cur_b + BLOCKSIZE)))
         {
             // if a free directory entry is found, remember its offset and block c_item_num
-            if (freeEntryOffset == -1 && currentEntry->inum == 0)
+            if (entry_offset == -1 && cur_entry->inum == 0)
             {
-                freeEntryb_num = b_num;
-                freeEntryOffset = (int)((char *)currentEntry - (char *)cur_b);
+                entry_b_num = b_num;
+                entry_offset = (int)((char *)cur_entry - (char *)cur_b);
             }
 
             // compare the directory entry name with specified pathname
-            bool isEqual = true;
+            bool eq = true;
             int j = 0;
             while (j < DIRNAMELEN)
             {
-                if ((pathname[j] == '/' || pathname[j] == '\0') && currentEntry->name[j] == '\0')
+                if ((pathname[j] == '/' || pathname[j] == '\0') && cur_entry->name[j] == '\0')
                 {
-                    isEqual = true;
+                    eq = true;
                     break;
                 }
-                if (pathname[j] != currentEntry->name[j])
+                if (pathname[j] != cur_entry->name[j])
                 {
-                    isEqual = false;
+                    eq = false;
                     break;
                 }
                 j++;
             }
 
             // if the names are equal, we've found the directory entry
-            if (isEqual)
+            if (eq)
             {
-                isFound = true;
+                found = true;
                 break;
             }
 
             // increment the current entry and total size
-            currentEntry = (struct dir_entry *)((char *)currentEntry + sizeof(struct dir_entry));
-            totalSize += sizeof(struct dir_entry);
+            cur_entry = (struct dir_entry *)((char *)cur_entry + sizeof(struct dir_entry));
+            total_size += sizeof(struct dir_entry);
         }
-        if (isFound)
+        if (found)
         {
             break;
         }
-        currb_num = b_num;
+        curr_b_num  = b_num;
         b_num = get_nth_b(inode, ++i, false);
     }
 
@@ -1666,19 +1643,19 @@ int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool crea
     *b_numPtr = b_num;
 
     // if the directory entry was found, return its offset
-    if (isFound)
+    if (found)
     {
-        int offset = (int)((char *)currentEntry - (char *)cur_b);
+        int offset = (int)((char *)cur_entry - (char *)cur_b);
         return offset;
     }
 
     // if we need to create the directory entry and there's free directory entry, use it
-    if (createIfNeeded)
+    if (should_make_dir)
     {
-        if (freeEntryb_num != 0)
+        if (entry_b_num != 0)
         {
-            *b_numPtr = freeEntryb_num;
-            return freeEntryOffset;
+            *b_numPtr = entry_b_num;
+            return entry_offset;
         }
 
         // if there's no free directory entry, create new block and directory entry
@@ -1687,14 +1664,14 @@ int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool crea
             b_num = get_nth_b(inode, i, true);
             cur_b = get_b(b_num);
             inode->size += sizeof(struct dir_entry);
-            struct dir_entry *newEntry = (struct dir_entry *)cur_b;
-            newEntry->inum = 0;
+            struct dir_entry *tmp_entry = (struct dir_entry *)cur_b;
+            tmp_entry->inum = 0;
 
             // mark the block and inode dirty in the cache
             cache_item *b_tmp = (cache_item *)query_ht(b_ht, b_num);
             b_tmp->dirty = true;
 
-            cache_item *i_tmp = (cache_item *)query_ht(i_ht, inodeStartNumber);
+            cache_item *i_tmp = (cache_item *)query_ht(i_ht, start_i);
             i_tmp->dirty = true;
 
             *b_numPtr = b_num;
@@ -1703,18 +1680,18 @@ int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool crea
 
         // if the current block still has space, add a new directory entry to it
         inode->size += sizeof(struct dir_entry);
-        cache_item *i_tmp = (cache_item *)query_ht(i_ht, inodeStartNumber);
+        cache_item *i_tmp = (cache_item *)query_ht(i_ht, start_i);
         i_tmp->dirty = true;
-        currentEntry->inum = 0;
+        cur_entry->inum = 0;
 
         // mark the current block and previous block dirty in the cache
-        cache_item *b_tmp = (cache_item *)query_ht(b_ht, currb_num);
+        cache_item *b_tmp = (cache_item *)query_ht(b_ht, curr_b_num );
         b_tmp->dirty = true;
-        cache_item *tmpb_tmp = (cache_item *)query_ht(b_ht, currb_num);
+        cache_item *tmpb_tmp = (cache_item *)query_ht(b_ht, curr_b_num );
         tmpb_tmp->dirty = true;
 
-        *b_numPtr = currb_num;
-        int offset = (int)((char *)currentEntry - (char *)cur_b);
+        *b_numPtr = curr_b_num ;
+        int offset = (int)((char *)cur_entry - (char *)cur_b);
         return offset;
     }
 
@@ -1726,7 +1703,7 @@ int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool crea
 // It returns the inode c_item_num of the directory that contains the file specified by pathname.
 // It also sets the filename pointer to point to the filename in the pathname.
 
-int get_super_dir(char *pathname, int curr_i, char **filenamePtr)
+int get_super_dir(char *pathname, int curr_i, char **file_ptr)
 {
     // check that the pathname is not too long
     int i;
@@ -1751,29 +1728,29 @@ int get_super_dir(char *pathname, int curr_i, char **filenamePtr)
     }
 
     // find the index of last slash in the pathname
-    int lastSlashIndex = 0;
+    int idx = 0;
     i = 0;
     while ((pathname[i] != '\0') && (i < MAXPATHNAMELEN))
     {
         if (pathname[i] == '/')
         {
-            lastSlashIndex = i;
+            idx = i;
         }
         i++;
     }
 
     // if there is a slash in the pathname, get the containing directory's inode c_item_num and set the filename pointer
-    if (lastSlashIndex != 0)
+    if (idx != 0)
     {
-        char path[lastSlashIndex + 1];
-        for (i = 0; i < lastSlashIndex; i++)
+        char path[idx + 1];
+        for (i = 0; i < idx; i++)
         {
             path[i] = pathname[i];
         }
         path[i] = '\0';
 
-        char *filename = pathname + (sizeof(char) * (lastSlashIndex + 1));
-        *filenamePtr = filename;
+        char *filename = pathname + (sizeof(char) * (idx + 1));
+        *file_ptr = filename;
         int dir_i_num = get_path_i_num(path, curr_i);
         if (dir_i_num == 0)
         {
@@ -1784,7 +1761,7 @@ int get_super_dir(char *pathname, int curr_i, char **filenamePtr)
     // if there is no slash in the pathname, set the filename pointer and return the current directory's inode c_item_num
     else
     {
-        *filenamePtr = pathname;
+        *file_ptr = pathname;
         return curr_i;
     }
 }

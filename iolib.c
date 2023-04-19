@@ -1,44 +1,43 @@
-#include <stdlib.h>
-#include <comp421/iolib.h>
 #include <comp421/filesystem.h>
 #include <comp421/yalnix.h>
+#include <stdlib.h>
+#include <comp421/iolib.h>
 #include "iolib.h"
 
-struct open_file {
+struct opened_file {
     int i_num;
-    int position;
+    int pos;
 };
-struct open_file * file_table[MAX_OPEN_FILES] = {NULL};
+struct opened_file * opened_ft[MAX_OPEN_FILES] = {NULL};
+
+
+struct opened_file * getFile(int fd);
 int files_open = 0;
 int cur_i = ROOTINODE;
-
-struct open_file * getFile(int fd);
-
+int cur_reuse = 0;
 
 int Open(char *pathname) {
     int fd;
     int i_num = send_path_m(YFS_OPEN, pathname);
     if (i_num == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
         return ERROR;
     }
     for (fd = 0; fd < MAX_OPEN_FILES; fd++) {
-        if (file_table[fd] == NULL) {
-            file_table[fd] = malloc(sizeof(struct open_file));
-            if (file_table[fd] == NULL) {
-                TracePrintf(1, "error allocating space for open file\n");
+        if (opened_ft[fd] == NULL) {
+            opened_ft[fd] = malloc(sizeof(struct opened_file));
+            if (opened_ft[fd] == NULL) {
+                TracePrintf(1, "ERROR: MALLOC\n");
                 return ERROR;
             }
-            file_table[fd]->i_num = i_num;
-            file_table[fd]->position = 0;
+            opened_ft[fd]->i_num = i_num;
+            opened_ft[fd]->pos = 0;
             break;
         }
     }
     if (fd == MAX_OPEN_FILES) {
-        TracePrintf(1, "file table full\n");
         return ERROR;
     }
-    TracePrintf(2, "inode num %d\n", i_num);
     return fd;
 }
 
@@ -46,26 +45,24 @@ int Create(char *pathname) {
     int fd;
     int i_num = send_path_m(YFS_CREATE, pathname);
     if (i_num == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
         return ERROR;
     }
     for (fd = 0; fd < MAX_OPEN_FILES; fd++) {
-        if (file_table[fd] == NULL) {
-            file_table[fd] = malloc(sizeof(struct open_file));
-            if (file_table[fd] == NULL) {
-                TracePrintf(1, "error allocating space for open file\n");
+        if (opened_ft[fd] == NULL) {
+            opened_ft[fd] = malloc(sizeof(struct opened_file));
+            if (opened_ft[fd] == NULL) {
+                TracePrintf(1, "ERROR: MALLOC\n");
                 return ERROR;
             }
-            file_table[fd]->i_num = i_num;
-            file_table[fd]->position = 0;
+            opened_ft[fd]->i_num = i_num;
+            opened_ft[fd]->pos = 0;
             break;
         }
     }
     if (fd == MAX_OPEN_FILES) {
-        TracePrintf(1, "file table full\n");
         return ERROR;
     }
-    TracePrintf(2, "inode num %d\n", i_num);
     return fd;
 }
 
@@ -75,12 +72,12 @@ Close(int fd)
     if (fd < 0 || fd >= MAX_OPEN_FILES) {
         return ERROR;
     }
-    struct open_file * file = file_table[fd];
+    struct opened_file * file = opened_ft[fd];
     if (file == NULL) {
         return ERROR;
     }
     free(file);
-    file_table[fd] = NULL;
+    opened_ft[fd] = NULL;
     return 0;
 }
 
@@ -90,16 +87,16 @@ Read(int fd, void *buf, int size)
     if (fd < 0 || fd >= MAX_OPEN_FILES) {
         return ERROR;
     }
-    struct open_file * file = file_table[fd];
+    struct opened_file * file = opened_ft[fd];
     if (file == NULL) {
         return ERROR;
     }
-    int bytes = send_file_m(YFS_READ, file->i_num, buf, size, file->position);
+    int bytes = send_file_m(YFS_READ, file->i_num, buf, size, file->pos);
     if (bytes == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
         return ERROR;
     }
-    file->position += bytes;
+    file->pos += bytes;
     return bytes;
 }
 
@@ -109,16 +106,16 @@ Write(int fd, void *buf, int size)
     if (fd < 0 || fd >= MAX_OPEN_FILES) {
         return ERROR;
     }
-    struct open_file * file = file_table[fd];
+    struct opened_file * file = opened_ft[fd];
     if (file == NULL) {
         return ERROR;
     }
-    int bytes = send_file_m(YFS_WRITE, file->i_num, buf, size, file->position);
+    int bytes = send_file_m(YFS_WRITE, file->i_num, buf, size, file->pos);
     if (bytes == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
         return ERROR;
     }
-    file->position += bytes;
+    file->pos += bytes;
     return bytes;
 }
 
@@ -129,7 +126,7 @@ int Seek(int fd, int offset, int whence) {
     if (whence != SEEK_SET && whence != SEEK_CUR && whence != SEEK_END) {
         return ERROR;
     }
-    struct open_file *file = file_table[fd];
+    struct opened_file *file = opened_ft[fd];
     if (file == NULL) {
         return ERROR;
     }
@@ -140,29 +137,29 @@ int Seek(int fd, int offset, int whence) {
     }
     struct m_seek *msg = malloc(sizeof(struct m_seek));
     if (msg == NULL) {
-         TracePrintf(1, "ERROR: allocating space in seek\n");
+         TracePrintf(1, "ERROR: SEEK MALLOC\n");
         return ERROR;
     }
     msg->num = YFS_SEEK;
     msg->i_num = file->i_num;
-    msg->cur_pos = file->position;
+    msg->cur_pos = file->pos;
     msg->offset = offset;
     msg->whence = whence;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "ERROR: sending message to server in seek\n");
+        TracePrintf(1, "ERROR: SEEK SEND MSG\n");
         free(msg);
         return ERROR;
     }
-    int position = msg->num;
+    int pos = msg->num;
     free(msg);
 
-    if (position == ERROR) {
-        TracePrintf(1, "ERROR: received from server in seek\n");
+    if (pos == ERROR) {
+        TracePrintf(1, "ERROR: RECEIVING MSG IN SEEK\n");
         return ERROR;
     }
     //
-    file->position = position;
-    return position;
+    file->pos = pos;
+    return pos;
 } 
 int
 Link(char *old_name, char *new_name)
@@ -185,7 +182,7 @@ Link(char *old_name, char *new_name)
     };
     int code = Send(&msg, -FILE_SERVER);
     if (code != 0) {
-        TracePrintf(1, "error sending message to server\n");
+        TracePrintf(1, "ERROR: SENDING MSG IN LINK\n");
         return ERROR;
     }
     return msg.num;
@@ -196,7 +193,7 @@ Unlink(char *pathname)
 {
     int code = send_path_m(YFS_UNLINK, pathname);
     if (code == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
     }
     return code;
 }
@@ -206,7 +203,7 @@ MkDir(char *pathname)
 {
     int code = send_path_m(YFS_MKDIR, pathname);
     if (code == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
     }
     return code;
 }
@@ -216,7 +213,7 @@ RmDir(char *pathname)
 {
     int code = send_path_m(YFS_RMDIR, pathname);
     if (code == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
     }
     return code;
 }
@@ -226,7 +223,7 @@ ChDir(char *pathname)
 {
     int i_num = send_path_m(YFS_CHDIR, pathname);
     if (i_num == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
         return ERROR;
     }
     cur_i = i_num;
@@ -243,7 +240,7 @@ int Stat(char *pathname, struct Stat *stat_buffer) {
     }
     struct message_stat *msg = malloc(sizeof(struct message_stat));
     if (msg == NULL) {
-        TracePrintf(1, "ERROR: allocating memory for message in Stat()\n");
+        TracePrintf(1, "ERROR: MALLOC IN STAT()\n");
         return ERROR;
     }
     msg->num = YFS_STAT;
@@ -252,16 +249,15 @@ int Stat(char *pathname, struct Stat *stat_buffer) {
     msg->len = len;
     msg->stat_buffer = stat_buffer;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "ERROR: in sending message to server in Stat()\n");
+        TracePrintf(1, "ERROR: SENDING MSG IN STAT()\n");
         free(msg);
         return ERROR;
     }
-    // msg gets overwritten with reply message after return from Send
     int code = msg->num;
     free(msg);
 
     if (code == ERROR) {
-        TracePrintf(1, "ERROR: from server in Stat()\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG IN STAT()\n");
     }
     return code;
 }
@@ -272,20 +268,19 @@ Sync()
 {
     struct m_template * msg = malloc(sizeof(struct m_template));
     if (msg == NULL) {
-        TracePrintf(1, "error allocating space for path message\n");
+        TracePrintf(1, "ERROR: MALLOC \n");
         return ERROR;
     }
     msg->num = YFS_SYNC;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "error sending message to server\n");
+        TracePrintf(1, "ERROR: SENDING MSG\n");
         free(msg);
         return ERROR;
     }
-    // msg gets overwritten with reply message after return from Send
     int code = msg->num;
     free(msg);
     if (code == ERROR) {
-        TracePrintf(1, "received error from server\n");
+        TracePrintf(1, "ERROR: RECEIVING MSG\n");
     }
     return code;
 }
@@ -295,12 +290,12 @@ Shutdown()
 {
     struct m_template * msg = malloc(sizeof(struct m_template));
     if (msg == NULL) {
-        TracePrintf(1, "error allocating space for path message\n");
+        TracePrintf(1, "ERROR: MALLOC \n");
         return ERROR;
     }
     msg->num = YFS_SHUTDOWN;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "error sending message to server\n");
+        TracePrintf(1, "ERROR: SENDING MSG\n");
         free(msg);
         return ERROR;
     }
@@ -325,7 +320,7 @@ get_path_len(char *pathname)
         }
     }
     if (i == 0 || i == MAXPATHNAMELEN) {
-        TracePrintf(1, "invalid pathname\n");
+        TracePrintf(1, "ERROR: INVALID PATH\n");
         return ERROR;
     }
     return i + 1;
@@ -340,7 +335,7 @@ send_path_m(int operation, char *pathname)
     }
     struct m_path * msg = malloc(sizeof(struct m_path));
     if (msg == NULL) {
-        TracePrintf(1, "error allocating space for path message\n");
+        TracePrintf(1, "ERROR: MALLOC \n");
         return ERROR;
     }
     msg->num = operation;
@@ -348,11 +343,10 @@ send_path_m(int operation, char *pathname)
     msg->pathname = pathname;
     msg->len = len;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "error sending message to server\n");
+        TracePrintf(1, "ERROR: SENDING MSG\n");
         free(msg);
         return ERROR;
     }
-    // msg gets overwritten with reply message after return from Send
     int code = msg->num;
     free(msg);
     return code;
@@ -366,7 +360,7 @@ send_file_m(int operation, int i_num, void *buf, int size, int offset)
     }
     struct m_file * msg = malloc(sizeof(struct m_file));
     if (msg == NULL) {
-        TracePrintf(1, "error allocating space for file message\n");
+        TracePrintf(1, "ERROR: MALLOC\n");
         return ERROR;
     }
     msg->num = operation;
@@ -375,7 +369,7 @@ send_file_m(int operation, int i_num, void *buf, int size, int offset)
     msg->size = size;
     msg->offset = offset;
     if (Send(msg, -FILE_SERVER) != 0) {
-        TracePrintf(1, "error sending message to server\n");
+        TracePrintf(1, "ERROR: SENDING MSG\n");
         free(msg);
         return ERROR;
     }

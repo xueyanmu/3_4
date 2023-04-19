@@ -44,7 +44,7 @@ int main()
 		for(j = 0 ; j < SIZE ; j++)
 			buf[j]++;
 		ret = Write(fd, buf, SIZE);
-		assert("Write position not advancing correctly in indirect block writes\n", ret == SIZE);
+		assert("Write pos not advancing correctly in indirect block writes\n", ret == SIZE);
 	}
 
 	// Seeking to the end of those 5 blocks, skipping a block, and then writing another block
@@ -55,7 +55,7 @@ int main()
 	assert("Seek not allowed to seek past end of file?\n", ret == SIZE * 6);
 
 	ret = Write(fd, buf, SIZE);
-	assert("Write position not advancing correctly after seeking past end of file\n", ret == SIZE);
+	assert("Write pos not advancing correctly after seeking past end of file\n", ret == SIZE);
 
 	ret = Seek(fd, 0, SEEK_END);
 	assert("Seek set not working correctly after skipping\n", ret == SIZE * 7);
