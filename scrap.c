@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 
                 int ret;
 
-                struct m_normal tmp_received;
+                struct m_template tmp_received;
 
                 int received_pid = Receive(&tmp_received);
 
@@ -147,7 +147,7 @@ int main(int argc, char **argv)
                 }
 
                 // send reply
-                struct m_normal msg_rply;
+                struct m_template msg_rply;
                 msg_rply.num = ret;
                 
                 if (Reply(&msg_rply, received_pid) != 0)

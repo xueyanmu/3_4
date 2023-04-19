@@ -270,7 +270,7 @@ int Stat(char *pathname, struct Stat *stat_buffer) {
 int
 Sync()
 {
-    struct m_normal * msg = malloc(sizeof(struct m_normal));
+    struct m_template * msg = malloc(sizeof(struct m_template));
     if (msg == NULL) {
         TracePrintf(1, "error allocating space for path message\n");
         return ERROR;
@@ -293,7 +293,7 @@ Sync()
 int
 Shutdown()
 {
-    struct m_normal * msg = malloc(sizeof(struct m_normal));
+    struct m_template * msg = malloc(sizeof(struct m_template));
     if (msg == NULL) {
         TracePrintf(1, "error allocating space for path message\n");
         return ERROR;

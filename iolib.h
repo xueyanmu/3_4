@@ -15,7 +15,7 @@
 #define YFS_SYNC        11
 #define YFS_SHUTDOWN    12
 
-struct m_normal {
+struct m_template {
     int num;
     char padding[28];
 };

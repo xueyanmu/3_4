@@ -117,7 +117,7 @@ int main(int argc, char **argv)
 
                 int ret;
 
-                struct m_normal tmp_received;
+                struct m_template tmp_received;
 
                 int received_pid = Receive(&tmp_received);
 
@@ -249,7 +249,7 @@ int main(int argc, char **argv)
                 }
 
                 
-                struct m_normal msg_rply;
+                struct m_template msg_rply;
                 msg_rply.num = ret;
                 
                 if (Reply(&msg_rply, received_pid) != 0)
@@ -325,173 +325,173 @@ bool isPathnameValid(char *pathname)
     return true;
 }
 
-int handle_create(char *pathname, int curr_i, int inodeNumToSet)
+int handle_create(char *pathname, int curr_i, int new_i_num)
 {
     if (!isPathnameValid(pathname) || curr_i <= 0)
     {
         return ERROR;
     }
 
-    TracePrintf(1, "Creating %s in %d\n", pathname, curr_i);
+    TracePrintf(1, "CREATE PATHNAME %s IN CURRENT INODE %d\n", pathname, curr_i);
 
     char *filename;
-    int dirInodeNum = get_super_dir(pathname, curr_i, &filename);
-    if (dirInodeNum == ERROR)
+    int dir_i_num = get_super_dir(pathname, curr_i, &filename);
+    if (dir_i_num == ERROR)
     {
         return ERROR;
     }
 
-    struct inode *dirInode = get_i(dirInodeNum);
-    if (dirInode->type != INODE_DIRECTORY)
+    struct inode *dir_i = get_i(dir_i_num);
+    if (dir_i->type != INODE_DIRECTORY)
     {
         return ERROR;
     }
 
-    int inodeNum = get_create_file(filename, dirInodeNum, inodeNumToSet);
-    if (inodeNum == ERROR)
+    int i_num = get_create_file(filename, dir_i_num, new_i_num);
+    if (i_num == ERROR)
     {
         return ERROR;
     }
 
-    return inodeNum;
+    return i_num;
 }
 
-int get_create_file(char *filename, int dirInodeNum, int inodeNumToSet)
+int get_create_file(char *filename, int dir_i_num, int new_i_num)
 {
-    int blockNum, offset;
-    offset = get_dir_entry(filename, dirInodeNum, &blockNum, true);
-    void *block = get_b(blockNum);
+    int b_num, offset;
+    offset = get_dir_entry(filename, dir_i_num, &b_num, true);
+    void *block = get_b(b_num);
     struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
-    int inodeNum = dir_entry->inum;
-    if (inodeNum != 0)
+    int i_num = dir_entry->inum;
+    if (i_num != 0)
     {
-        if (inodeNumToSet != -1)
+        if (new_i_num != -1)
         {
             return ERROR;
         }
-        zero_file(inodeNum);
+        zero_file(i_num);
     }
     else
     {
-        inodeNum = make_file(filename, dir_entry, inodeNumToSet);
+        i_num = make_file(filename, dir_entry, new_i_num);
     }
-    cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+    cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
     blockItem->dirty = true;
-    return inodeNum;
+    return i_num;
 }
 
-void zero_file(int inodeNum)
+void zero_file(int i_num)
 {
-    struct inode *inode = get_i(inodeNum);
-    int j = 0, blockNum;
-    while ((blockNum = get_nth_b(inode, j++, false)) != 0)
+    struct inode *inode = get_i(i_num);
+    int j = 0, b_num;
+    while ((b_num = get_nth_b(inode, j++, false)) != 0)
     {
-        free_block *newHead = malloc(sizeof(free_block));
-        newHead->b_num = blockNum;
-        newHead->next_inode = b_head;
-        b_head = newHead;
+        free_block *new_b = malloc(sizeof(free_block));
+        new_b->b_num = b_num;
+        new_b->next_inode = b_head;
+        b_head = new_b;
         free_b_count++;
     }
     inode->size = 0;
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+    i_tmp->dirty = true;
 }
 
-int make_file(char *filename, struct dir_entry *dir_entry, int inodeNumToSet)
+int make_file(char *filename, struct dir_entry *dir_entry, int new_i_num)
 {
     strncpy(dir_entry->name, filename, DIRNAMELEN);
     //dont create new
-    if (inodeNumToSet == -1)
+    if (new_i_num == -1)
     {
-        int inodeNum = get_next_inum_free();
-        dir_entry->inum = inodeNum;
-        struct inode *inode = get_i(inodeNum);
+        int i_num = get_next_inum_free();
+        dir_entry->inum = i_num;
+        struct inode *inode = get_i(i_num);
         inode->type = INODE_REGULAR;
         inode->size = 0;
         inode->nlink = 1;
-        cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-        inodeItem->dirty = true;
-        return inodeNum;
+        cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+        i_tmp->dirty = true;
+        return i_num;
     }
     else
     {
-        dir_entry->inum = inodeNumToSet;
-        return inodeNumToSet;
+        dir_entry->inum = new_i_num;
+        return new_i_num;
     }
 }
 
-int is_valid_inputs(int inodeNum, void *buf, int size, int byteOffset)
+int is_valid_inputs(int i_num, void *buf, int size, int byte_offset)
 {
-    if (buf == NULL || size < 0 || byteOffset < 0 || inodeNum <= 0)
+    if (buf == NULL || size < 0 || byte_offset < 0 || i_num <= 0)
     {
         return false;
     }
     return true;
 }
 
-int get_num_bytes_left(int byteOffset, int size, struct inode *inode)
+int get_num_bytes_left(int byte_offset, int size, struct inode *inode)
 {
-    int bytesLeft = size;
-    if (inode->size - byteOffset < size)
+    int leftover_bytes = size;
+    if (inode->size - byte_offset < size)
     {
-        bytesLeft = inode->size - byteOffset;
+        leftover_bytes = inode->size - byte_offset;
     }
-    return bytesLeft;
+    return leftover_bytes;
 }
 
-void read_update(void **buf, int *blockOffset, int *bytesLeft, int *bytesToCopy)
+void read_update(void **buf, int *b_offset, int *leftover_bytes, int *num_bytes)
 {
-    *buf += *bytesToCopy;
-    *blockOffset = 0;
-    *bytesLeft -= *bytesToCopy;
-    *bytesToCopy = BLOCKSIZE;
+    *buf += *num_bytes;
+    *b_offset = 0;
+    *leftover_bytes -= *num_bytes;
+    *num_bytes = BLOCKSIZE;
 }
 
-int handle_read(int inodeNum, void *buf, int size, int byteOffset, int pid)
+int handle_read(int i_num, void *buf, int size, int byte_offset, int pid)
 {
-    if (is_valid_inputs(inodeNum, buf, size, byteOffset) == ERROR)
+    if (is_valid_inputs(i_num, buf, size, byte_offset) == ERROR)
     {
         return ERROR;
     }
 
-    struct inode *inode = get_i(inodeNum);
+    struct inode *inode = get_i(i_num);
 
-    if (byteOffset > inode->size)
+    if (byte_offset > inode->size)
     {
         return ERROR;
     }
 
-    int bytesLeft = get_num_bytes_left(byteOffset, size, inode);
-    int returnVal = bytesLeft;
+    int leftover_bytes = get_num_bytes_left(byte_offset, size, inode);
+    int ret = leftover_bytes;
 
-    int blockOffset = byteOffset % BLOCKSIZE;
-    int bytesToCopy = BLOCKSIZE - blockOffset;
+    int b_offset = byte_offset % BLOCKSIZE;
+    int num_bytes = BLOCKSIZE - b_offset;
 
     int i;
-    for (i = byteOffset / BLOCKSIZE; bytesLeft > 0; i++)
+    for (i = byte_offset / BLOCKSIZE; leftover_bytes > 0; i++)
     {
-        int blockNum = get_nth_b(inode, i, false);
-        if (blockNum == 0)
+        int b_num = get_nth_b(inode, i, false);
+        if (b_num == 0)
         {
             return ERROR;
         }
-        void *currentBlock = get_b(blockNum);
+        void *cur_b = get_b(b_num);
 
-        if (bytesLeft < bytesToCopy)
+        if (leftover_bytes < num_bytes)
         {
-            bytesToCopy = bytesLeft;
+            num_bytes = leftover_bytes;
         }
 
-        if (CopyTo(pid, buf, (char *)currentBlock + blockOffset, bytesToCopy) == ERROR)
+        if (CopyTo(pid, buf, (char *)cur_b + b_offset, num_bytes) == ERROR)
         {
-            TracePrintf(1, "error copying %d bytes to pid %d\n", bytesToCopy, pid);
+            TracePrintf(1, "ERROR: COPY %d BYTES FOR PROC %d\n", num_bytes, pid);
             return ERROR;
         }
 
-        read_update(&buf, &blockOffset, &bytesLeft, &bytesToCopy);
+        read_update(&buf, &b_offset, &leftover_bytes, &num_bytes);
     }
 
-    return returnVal;
+    return ret;
 }
 
 int is_valid_i(struct inode *inode)
@@ -503,77 +503,77 @@ int is_valid_i(struct inode *inode)
     return true;
 }
 
-int get_num_copy_bytes(int bytesLeft, int blockOffset)
+int get_num_copy_bytes(int leftover_bytes, int b_offset)
 {
-    int bytesToCopy = BLOCKSIZE - blockOffset;
-    if (bytesLeft < bytesToCopy)
+    int num_bytes = BLOCKSIZE - b_offset;
+    if (leftover_bytes < num_bytes)
     {
-        bytesToCopy = bytesLeft;
+        num_bytes = leftover_bytes;
     }
-    return bytesToCopy;
+    return num_bytes;
 }
 
-void write_update(void **buf, int *blockOffset, int *bytesLeft, int *bytesToCopy)
+void write_update(void **buf, int *b_offset, int *leftover_bytes, int *num_bytes)
 {
-    *buf += *bytesToCopy;
-    *blockOffset = 0;
-    *bytesLeft -= *bytesToCopy;
-    *bytesToCopy = BLOCKSIZE;
+    *buf += *num_bytes;
+    *b_offset = 0;
+    *leftover_bytes -= *num_bytes;
+    *num_bytes = BLOCKSIZE;
 }
 
-void update_i_size(struct inode *inode, int size, int byteOffset, int bytesLeft)
+void update_i_size(struct inode *inode, int size, int byte_offset, int leftover_bytes)
 {
-    int bytesWrittenSoFar = size - bytesLeft;
-    if (bytesWrittenSoFar + byteOffset > inode->size)
+    int wrote_bytes = size - leftover_bytes;
+    if (wrote_bytes + byte_offset > inode->size)
     {
-        inode->size = bytesWrittenSoFar + byteOffset;
+        inode->size = wrote_bytes + byte_offset;
     }
 }
 
-int handle_write(int inodeNum, void *buf, int size, int byteOffset, int pid)
+int handle_write(int i_num, void *buf, int size, int byte_offset, int pid)
 {
-    struct inode *inode = get_i(inodeNum);
+    struct inode *inode = get_i(i_num);
 
     if (is_valid_i(inode) == ERROR)
     {
         return ERROR;
     }
 
-    int bytesLeft = size;
-    int returnVal = bytesLeft;
-    int blockOffset = byteOffset % BLOCKSIZE;
-    int bytesToCopy = get_num_copy_bytes(bytesLeft, blockOffset);
+    int leftover_bytes = size;
+    int ret = leftover_bytes;
+    int b_offset = byte_offset % BLOCKSIZE;
+    int num_bytes = get_num_copy_bytes(leftover_bytes, b_offset);
 
     int i;
-    for (i = byteOffset / BLOCKSIZE; bytesLeft > 0; i++)
+    for (i = byte_offset / BLOCKSIZE; leftover_bytes > 0; i++)
     {
-        int blockNum = get_nth_b(inode, i, true);
-        if (blockNum == 0)
+        int b_num = get_nth_b(inode, i, true);
+        if (b_num == 0)
         {
             return ERROR;
         }
-        void *currentBlock = get_b(blockNum);
-        bytesToCopy = get_num_copy_bytes(bytesLeft, blockOffset);
+        void *cur_b = get_b(b_num);
+        num_bytes = get_num_copy_bytes(leftover_bytes, b_offset);
 
-        if (CopyFrom(pid, (char *)currentBlock + blockOffset, buf, bytesToCopy) == ERROR)
+        if (CopyFrom(pid, (char *)cur_b + b_offset, buf, num_bytes) == ERROR)
         {
-            TracePrintf(1, "ERROR: DID NOT COPY %d BYTES FROM USER PID %d\n", bytesToCopy, pid);
+            TracePrintf(1, "ERROR: DID NOT COPY %d BYTES FROM USER PID %d\n", num_bytes, pid);
             return ERROR;
         }
 
-        write_update(&buf, &blockOffset, &bytesLeft, &bytesToCopy);
+        write_update(&buf, &b_offset, &leftover_bytes, &num_bytes);
 
         // mark block as dirty
-        cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+        cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
         blockItem->dirty = true;
 
-        update_i_size(inode, size, byteOffset, bytesLeft);
+        update_i_size(inode, size, byte_offset, leftover_bytes);
     }
 
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+    i_tmp->dirty = true;
 
-    return returnVal;
+    return ret;
 }
 
 void adjustPathAndInode(char **name, int *curr_i)
@@ -609,8 +609,8 @@ int handle_link(char *old_name, char *new_name, int curr_i)
     }
 
     inode->nlink++;
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, old_nameNodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, old_nameNodeNum);
+    i_tmp->dirty = true;
 
     return 0;
 }
@@ -624,28 +624,28 @@ int handle_unlink(char *pathname, int curr_i)
 
     // Get the containing directory
     char *filename;
-    int dirInodeNum = get_super_dir(pathname, curr_i, &filename);
+    int dir_i_num = get_super_dir(pathname, curr_i, &filename);
 
-    struct inode *dirInode = get_i(dirInodeNum);
-    if (dirInode->type != INODE_DIRECTORY)
+    struct inode *dir_i = get_i(dir_i_num);
+    if (dir_i->type != INODE_DIRECTORY)
     {
         return ERROR;
     }
 
-    int blockNum;
-    int offset = get_dir_entry(filename, dirInodeNum, &blockNum, false);
+    int b_num;
+    int offset = get_dir_entry(filename, dir_i_num, &b_num, false);
     if (offset == -1)
     {
         return ERROR;
     }
-    void *block = get_b(blockNum);
+    void *block = get_b(b_num);
 
     // Get the directory entry associated with the path
     struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
 
     // Get the inode associated with the directory entry
-    int inodeNum = dir_entry->inum;
-    struct inode *inode = get_i(inodeNum);
+    int i_num = dir_entry->inum;
+    struct inode *inode = get_i(i_num);
 
     // Decrease nlinks by 1
     inode->nlink--;
@@ -654,28 +654,28 @@ int handle_unlink(char *pathname, int curr_i)
     if (inode->nlink == 0)
     {
         int i = 0;
-        int blockNum;
-        while ((blockNum = get_nth_b(inode, i++, false)) != 0)
+        int b_num;
+        while ((b_num = get_nth_b(inode, i++, false)) != 0)
         {
             // Add block to the free block list (originally from addfree_blockToList)
-            free_block *newHead = malloc(sizeof(free_block));
-            newHead->b_num = blockNum;
-            newHead->next_inode = b_head;
-            b_head = newHead;
+            free_block *new_b = malloc(sizeof(free_block));
+            new_b->b_num = b_num;
+            new_b->next_inode = b_head;
+            b_head = new_b;
             free_b_count++;
         }
         inode->size = 0;
     }
 
     // Mark inode as dirty
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+    i_tmp->dirty = true;
 
     // Set the inum to zero
     dir_entry->inum = 0;
 
     // Mark block as dirty
-    cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+    cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
     blockItem->dirty = true;
 
     return 0;
@@ -695,7 +695,7 @@ int getUpdatedPathAndInode(char **pathname, int *curr_i)
     return 0;
 }
 
-void updateDirectoryEntry(struct dir_entry *dir_entry, char *filename, int inodeNum)
+void updateDirectoryEntry(struct dir_entry *dir_entry, char *filename, int i_num)
 {
     memset(&dir_entry->name, '\0', DIRNAMELEN);
     int i;
@@ -703,7 +703,7 @@ void updateDirectoryEntry(struct dir_entry *dir_entry, char *filename, int inode
     {
         dir_entry->name[i] = filename[i];
     }
-    dir_entry->inum = inodeNum;
+    dir_entry->inum = i_num;
 }
 
 int handle_mkdir(char *pathname, int curr_i)
@@ -713,10 +713,10 @@ int handle_mkdir(char *pathname, int curr_i)
         return ERROR;
     }
     char *filename;
-    int dirInodeNum = get_super_dir(pathname, curr_i, &filename);
-    int blockNum;
-    int offset = get_dir_entry(filename, dirInodeNum, &blockNum, true);
-    void *block = get_b(blockNum);
+    int dir_i_num = get_super_dir(pathname, curr_i, &filename);
+    int b_num;
+    int offset = get_dir_entry(filename, dir_i_num, &b_num, true);
+    void *block = get_b(b_num);
 
     struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
 
@@ -725,36 +725,36 @@ int handle_mkdir(char *pathname, int curr_i)
         return ERROR;
     }
 
-    int inodeNum = get_next_inum_free();
-    updateDirectoryEntry(dir_entry, filename, inodeNum);
-    cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+    int i_num = get_next_inum_free();
+    updateDirectoryEntry(dir_entry, filename, i_num);
+    cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
     blockItem->dirty = true;
 
-    block = get_b((inodeNum / (BLOCKSIZE / INODESIZE)) + 1);
-    struct inode *inode = get_i(inodeNum);
+    block = get_b((i_num / (BLOCKSIZE / INODESIZE)) + 1);
+    struct inode *inode = get_i(i_num);
     inode->type = INODE_DIRECTORY;
     inode->size = 2 * sizeof(struct dir_entry);
     inode->nlink = 1;
 
-    int firstDirectBlockNum = get_next_free_bnum();
-    void *firstDirectBlock = get_b(firstDirectBlockNum);
-    inode->direct[0] = firstDirectBlockNum;
+    int firstDirectb_num = get_next_free_bnum();
+    void *firstDirectBlock = get_b(firstDirectb_num);
+    inode->direct[0] = firstDirectb_num;
 
     struct dir_entry *dir1 = (struct dir_entry *)firstDirectBlock;
-    dir1->inum = inodeNum;
+    dir1->inum = i_num;
     dir1->name[0] = '.';
 
     struct dir_entry *dir2 = (struct dir_entry *)((char *)dir1 + sizeof(struct dir_entry));
-    dir2->inum = dirInodeNum;
+    dir2->inum = dir_i_num;
     dir2->name[0] = '.';
     dir2->name[1] = '.';
 
     // mark block as dirty
-    blockItem = (cache_item *)query_ht(b_ht, firstDirectBlockNum);
+    blockItem = (cache_item *)query_ht(b_ht, firstDirectb_num);
     blockItem->dirty = true;
 
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+    i_tmp->dirty = true;
 
     return 0;
 }
@@ -762,14 +762,14 @@ int handle_mkdir(char *pathname, int curr_i)
 void clearFile(struct inode *inode)
 {
     int i = 0;
-    int blockNum;
-    while ((blockNum = get_nth_b(inode, i++, false)) != 0)
+    int b_num;
+    while ((b_num = get_nth_b(inode, i++, false)) != 0)
     {
-        free_block *newHead = malloc(sizeof(free_block));
-        newHead->b_num = blockNum;
-        newHead->next_inode = b_head;
+        free_block *new_b = malloc(sizeof(free_block));
+        new_b->b_num = b_num;
+        new_b->next_inode = b_head;
 
-        b_head = newHead;
+        b_head = new_b;
         free_b_count++;
     }
     inode->size = 0;
@@ -785,15 +785,15 @@ int handle_rmdir(char *pathname, int curr_i)
     }
 
     // get the inode c_item_num for the given pathname and current inode
-    int inodeNum = get_path_i_num(pathname, curr_i);
+    int i_num = get_path_i_num(pathname, curr_i);
 
-    if (inodeNum == ERROR)
+    if (i_num == ERROR)
     {
         TracePrintf(1, "handle_rmdir: invalid inode c_item_num for pathname '%s'\n", pathname);
         return ERROR;
     }
 
-    struct inode *inode = get_i(inodeNum);
+    struct inode *inode = get_i(i_num);
 
     if (inode->size > (int)(2 * sizeof(struct dir_entry)))
     {
@@ -802,21 +802,21 @@ int handle_rmdir(char *pathname, int curr_i)
     }
 
     clearFile(inode);
-    add_free_i_list(inodeNum);
+    add_free_i_list(i_num);
 
     char *filename;
-    int dirInodeNum = get_super_dir(pathname, curr_i, &filename);
+    int dir_i_num = get_super_dir(pathname, curr_i, &filename);
 
-    int blockNum;
-    int offset = get_dir_entry(filename, dirInodeNum, &blockNum, true);
+    int b_num;
+    int offset = get_dir_entry(filename, dir_i_num, &b_num, true);
 
     // get the block containing the directory entry and update it
-    void *block = get_b(blockNum);
+    void *block = get_b(b_num);
     struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
     dir_entry->inum = 0;
 
     // mark the block as dirty
-    cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+    cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
     blockItem->dirty = true;
 
     TracePrintf(2, "handle_rmdir: remove directory successful for pathname '%s'\n", pathname);
@@ -864,17 +864,17 @@ int handle_stat(char *pathname, int curr_i, struct Stat *stat_buffer, int pid)
         curr_i = ROOTINODE;
     }
 
-    int inodeNum = get_path_i_num(pathname, curr_i);
-    if (inodeNum == 0)
+    int i_num = get_path_i_num(pathname, curr_i);
+    if (i_num == 0)
     {
         TracePrintf(2, "handle_stat: invalid inode c_item_num for pathname '%s'\n", pathname);
         return ERROR;
     }
 
-    struct inode *inode = get_i(inodeNum);
+    struct inode *inode = get_i(i_num);
 
     struct Stat stat;
-    stat.inum = inodeNum;
+    stat.inum = i_num;
     stat.nlink = inode->nlink;
     stat.size = inode->size;
     stat.type = inode->type;
@@ -897,9 +897,9 @@ int handle_shutdown(void)
     TracePrintf(1, "SHUTTING DOWN YFS\n");
     Exit(0);
 }
-int handle_seek(int inodeNum, int offset, int whence, int currentPosition)
+int handle_seek(int i_num, int offset, int whence, int currentPosition)
 {
-    struct inode *inode = get_i(inodeNum);
+    struct inode *inode = get_i(i_num);
     int size = inode->size;
     // check if the given currentPosition is valid
     if (currentPosition > size || currentPosition < 0)
@@ -976,28 +976,28 @@ int handle_sync(void)
     }
 
     // now, sync all dirty inodes
-    cache_item *currInodeItem = cache_i_queue->q_first;
-    while (currInodeItem != NULL)
+    cache_item *curri_tmp = cache_i_queue->q_first;
+    while (curri_tmp != NULL)
     {
         // check if this inode is dirty (i.e. has been modified)
-        if (currInodeItem->dirty)
+        if (curri_tmp->dirty)
         {
             // get the block containing this inode
-            int inodeNum = currInodeItem->c_item_num;
-            int blockNum = (inodeNum / (BLOCKSIZE / INODESIZE)) + 1;
+            int i_num = curri_tmp->c_item_num;
+            int b_num = (i_num / (BLOCKSIZE / INODESIZE)) + 1;
 
             // copy the inode from the cache to the block
-            void *block = get_b(blockNum);
-            void *inodeAddrInBlock = (block + (inodeNum - (blockNum - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
-            memcpy(inodeAddrInBlock, currInodeItem->addr, sizeof(struct inode));
+            void *block = get_b(b_num);
+            void *inodeAddrInBlock = (block + (i_num - (b_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
+            memcpy(inodeAddrInBlock, curri_tmp->addr, sizeof(struct inode));
 
             // write the block containing the inode to disk
-            WriteSector(blockNum, block);
-            TracePrintf(2, "sync: wrote inode %d (in block %d) to disk\n", inodeNum, blockNum);
+            WriteSector(b_num, block);
+            TracePrintf(2, "sync: wrote inode %d (in block %d) to disk\n", i_num, b_num);
         }
 
         // move on to the next_inode inode in the queue
-        currInodeItem = currInodeItem->next_c_item;
+        curri_tmp = curri_tmp->next_c_item;
     }
 
     TracePrintf(1, "finished with sync()\n");
@@ -1115,17 +1115,16 @@ get_proc_path(int pid, char *pathname, int len)
     char *local_pathname = malloc(len * sizeof(char));
     if (local_pathname == NULL)
     {
-        TracePrintf(1, "error allocating memory for pathname\n");
         return NULL;
     }
     if (CopyFrom(pid, local_pathname, pathname, len) != 0)
     {
-        TracePrintf(1, "error copying %d bytes from %p in pid %d to %p locally\n",
-                    len, pathname, pid, local_pathname);
         return NULL;
     }
     return local_pathname;
 }
+
+
 cache_item *left_dequeue(queue *queue)
 {
     cache_item *q_first = queue->q_first;
@@ -1199,10 +1198,10 @@ void evict_b()
     // Free the memory occupied by the LRU block item
 
     cache_item *lruBlockItem = left_dequeue(cache_b_queue);
-    int lruBlockNum = lruBlockItem->c_item_num;
-    WriteSector(lruBlockNum, lruBlockItem->addr);
+    int lrub_num = lruBlockItem->c_item_num;
+    WriteSector(lrub_num, lruBlockItem->addr);
     cache_b_size--;
-    evict_ht(b_ht, lruBlockNum);
+    evict_ht(b_ht, lrub_num);
 
     // Free the memory occupied by the LRU block item
     free(lruBlockItem->addr);
@@ -1249,18 +1248,18 @@ void *get_b(int b_num)
 void evict_i()
 {
     cache_item *lruInode = left_dequeue(cache_i_queue);
-    int lruInodeNum = lruInode->c_item_num;
+    int lrui_num = lruInode->c_item_num;
     cache_i_size--;
-    evict_ht(i_ht, lruInodeNum);
+    evict_ht(i_ht, lrui_num);
 
     // write the evicted inode back to its block
-    int lruBlockNum = (lruInodeNum / (BLOCKSIZE / INODESIZE)) + 1;
-    void *lruBlock = get_b(lruBlockNum);
-    void *inodeAddrInBlock = (lruBlock + (lruInodeNum - (lruBlockNum - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
+    int lrub_num = (lrui_num / (BLOCKSIZE / INODESIZE)) + 1;
+    void *lruBlock = get_b(lrub_num);
+    void *inodeAddrInBlock = (lruBlock + (lrui_num - (lrub_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
     memcpy(inodeAddrInBlock, lruInode->addr, sizeof(struct inode));
 
     // mark block as dirty
-    cache_item *tmpBlockItem = (cache_item *)query_ht(b_ht, lruBlockNum);
+    cache_item *tmpBlockItem = (cache_item *)query_ht(b_ht, lrub_num);
     tmpBlockItem->dirty = true;
 
     // free the memory occupied by the LRU inode item
@@ -1269,9 +1268,9 @@ void evict_i()
 }
 
 // Get LRU inode from cache
-struct inode *get_i(int inodeNum)
+struct inode *get_i(int i_num)
 {
-    cache_item *nodeItem = (cache_item *)query_ht(i_ht, inodeNum);
+    cache_item *nodeItem = (cache_item *)query_ht(i_ht, i_num);
 
     // if iniode found, update position to end of queue
     if (nodeItem != NULL)
@@ -1288,23 +1287,23 @@ struct inode *get_i(int inodeNum)
     }
 
     // read the requested inode from its block
-    int blockNum = (inodeNum / (BLOCKSIZE / INODESIZE)) + 1;
-    void *blockAddr = get_b(blockNum);
-    struct inode *newInodeAddrInBlock = (struct inode *)(blockAddr + (inodeNum - (blockNum - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
+    int b_num = (i_num / (BLOCKSIZE / INODESIZE)) + 1;
+    void *blockAddr = get_b(b_num);
+    struct inode *newInodeAddrInBlock = (struct inode *)(blockAddr + (i_num - (b_num - 1) * (BLOCKSIZE / INODESIZE)) * INODESIZE);
 
     // copy the inode from its block to a new memory location and create a new cache item for it
     struct inode *inodeCpy = malloc(sizeof(struct inode));
-    struct cache_item *inodeItem = malloc(sizeof(struct cache_item));
+    struct cache_item *i_tmp = malloc(sizeof(struct cache_item));
     memcpy(inodeCpy, newInodeAddrInBlock, sizeof(struct inode));
-    inodeItem->addr = inodeCpy;
-    inodeItem->c_item_num = inodeNum;
+    i_tmp->addr = inodeCpy;
+    i_tmp->c_item_num = i_num;
 
     // add the new inode cache item to the LRU queue and the inode hash table
-    right_enqueue(inodeItem, cache_i_queue);
+    right_enqueue(i_tmp, cache_i_queue);
     cache_i_size++;
-    insert_ht(i_ht, inodeNum, inodeItem);
+    insert_ht(i_ht, i_num, i_tmp);
 
-    return inodeItem->addr;
+    return i_tmp->addr;
 }
 
 // get the nth block of an inode. If the block does not exist and allocateIfNeeded is true, allocate a new block.
@@ -1352,10 +1351,10 @@ int get_nth_b(struct inode *inode, int n, bool allocateIfNeeded)
     }
 
     // get the block c_item_num from the indirect block
-    int blockNum = indirectBlock[n - NUM_DIRECT];
+    int b_num = indirectBlock[n - NUM_DIRECT];
 
     // return the block c_item_num
-    return blockNum;
+    return b_num;
 }
 
 // Helper function to get the next_inode path segment
@@ -1380,23 +1379,23 @@ char *get_next_path_part(char *path)
 
 int get_path_i_num(char *path, int inodeStartNumber)
 {
-    int nextInodeNumber = 0;
+    int nexti_number = 0;
     void *block;
     struct inode *inode = get_i(inodeStartNumber);
 
     if (inode->type == INODE_DIRECTORY)
     {
-        int blockNum;
-        int offset = get_dir_entry(path, inodeStartNumber, &blockNum, false);
+        int b_num;
+        int offset = get_dir_entry(path, inodeStartNumber, &b_num, false);
         if (offset != -1)
         {
-            block = get_b(blockNum);
+            block = get_b(b_num);
             struct dir_entry *dir_entry = (struct dir_entry *)((char *)block + offset);
             // set next_inode inode c_item_num to inode c_item_num of the directory entry
-            nextInodeNumber = dir_entry->inum;
+            nexti_number = dir_entry->inum;
         }
     }
-    else if (inode->type == INODE_REGULAR || nextInodeNumber == 0)
+    else if (inode->type == INODE_REGULAR || nexti_number == 0)
     {
         return 0;
     }
@@ -1405,13 +1404,13 @@ int get_path_i_num(char *path, int inodeStartNumber)
     // check if we've reached the end of the path
     if (*nextPath == '\0')
     {
-        // get inode pointer using nextInodeNumber
-        inode = get_i(nextInodeNumber);
-        return nextInodeNumber;
+        // get inode pointer using nexti_number
+        inode = get_i(nexti_number);
+        return nexti_number;
     }
 
     // recursively call function with next_inode path segment and next_inode inode c_item_num
-    return get_path_i_num(nextPath, nextInodeNumber);
+    return get_path_i_num(nextPath, nexti_number);
 }
 
 // grab the next_inode free inode c_item_num from inode freelist
@@ -1422,26 +1421,26 @@ int get_next_inum_free()
         return 0;
     }
 
-    int inodeNum = i_head->i_num;
-    struct inode *inode = get_i(inodeNum);
+    int i_num = i_head->i_num;
+    struct inode *inode = get_i(i_num);
     inode->reuse++; // now we have used this inode
 
     // mark dirty
-    cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeNum);
-    inodeItem->dirty = true;
+    cache_item *i_tmp = (cache_item *)query_ht(i_ht, i_num);
+    i_tmp->dirty = true;
 
     // Move the first free inode pointer to the next_inode free inode
     i_head = i_head->next_inode;
 
-    return inodeNum;
+    return i_num;
 }
 
-void add_free_i_list(int inodeNum)
+void add_free_i_list(int i_num)
 {
-    free_inode *newHead = malloc(sizeof(free_inode));
-    newHead->i_num = inodeNum;
-    newHead->next_inode = i_head;
-    i_head = newHead;
+    free_inode *new_b = malloc(sizeof(free_inode));
+    new_b->i_num = i_num;
+    new_b->next_inode = i_head;
+    i_head = new_b;
     free_i_count++;
 }
 
@@ -1451,17 +1450,17 @@ int get_next_free_bnum()
     {
         return 0;
     }
-    int blockNum = b_head->b_num;
+    int b_num = b_head->b_num;
     b_head = b_head->next_inode;
-    return blockNum;
+    return b_num;
 }
 
-void add_b_freelist(int blockNum)
+void add_b_freelist(int b_num)
 {
-    free_block *newHead = malloc(sizeof(free_block));
-    newHead->b_num = blockNum;
-    newHead->next_inode = b_head;
-    b_head = newHead;
+    free_block *new_b = malloc(sizeof(free_block));
+    new_b->b_num = b_num;
+    new_b->next_inode = b_head;
+    b_head = new_b;
     free_b_count++;
 }
 
@@ -1483,8 +1482,8 @@ void make_free_lists()
     b_ht = init_ht(1.5, BLOCK_CACHESIZE + 1);
 
     // init variables for loop
-    int blockNum = 1;
-    void *block = get_b(blockNum);
+    int b_num = 1;
+    void *block = get_b(b_num);
 
     // init fs header and initialize array of taken blocks
     struct fs_header header = *((struct fs_header *)block);
@@ -1492,28 +1491,28 @@ void make_free_lists()
     memset(takenBlocks, false, header.num_blocks * sizeof(bool));
     takenBlocks[0] = true;
 
-    int inodeNum = ROOTINODE;
+    int i_num = ROOTINODE;
     // loop through all inodes
-    while (inodeNum < header.num_inodes)
+    while (i_num < header.num_inodes)
     {
         // loop through inodes in current block
-        while (inodeNum < (BLOCKSIZE / INODESIZE) * blockNum)
+        while (i_num < (BLOCKSIZE / INODESIZE) * b_num)
         {
-            struct inode *inode = get_i(inodeNum);
+            struct inode *inode = get_i(i_num);
             if (inode->type == INODE_FREE)
             {
                 // if inode is free, create free_inode and add it to freelist
-                free_inode *newHead = malloc(sizeof(free_inode));
-                newHead->i_num = inodeNum;
-                newHead->next_inode = i_head;
-                i_head = newHead;
+                free_inode *new_b = malloc(sizeof(free_inode));
+                new_b->i_num = i_num;
+                new_b->next_inode = i_head;
+                i_head = new_b;
                 free_i_count++;
             }
             else
             {
                 // if inode is not free, mark the blocks it uses as taken
                 int i = 0;
-                int blockNum;
+                int b_num;
                 while (1)
                 {
                     // loop through all direct and indirect block pointers in inode
@@ -1523,29 +1522,27 @@ void make_free_lists()
                     }
                     if (i < NUM_DIRECT)
                     {
-                        blockNum = inode->direct[i];
+                        b_num = inode->direct[i];
                     }
                     else
                     {
                         int *indirectBlock = get_b(inode->indirect);
-                        blockNum = indirectBlock[i - NUM_DIRECT];
+                        b_num = indirectBlock[i - NUM_DIRECT];
                     }
                     // mark block as taken
-                    if (blockNum == 0)
+                    if (b_num == 0)
                     {
                         break;
                     }
-                    takenBlocks[blockNum] = true;
+                    takenBlocks[b_num] = true;
                     i++;
                 }
             }
-            inodeNum++;
+            i_num++;
         }
-        blockNum++;
-        block = get_b(blockNum);
+        b_num++;
+        block = get_b(b_num);
     }
-
-    TracePrintf(1, "initialized free inode list with %d free inodes\n", free_i_count);
 
     // loop through all blocks and add free blocks to list
     int i;
@@ -1553,45 +1550,44 @@ void make_free_lists()
     {
         if (!takenBlocks[i])
         {
-            free_block *newHead = malloc(sizeof(free_block));
-            newHead->b_num = i;
-            newHead->next_inode = b_head;
-            b_head = newHead;
+            free_block *new_b = malloc(sizeof(free_block));
+            new_b->b_num = i;
+            new_b->next_inode = b_head;
+            b_head = new_b;
             free_b_count++;
         }
     }
-    TracePrintf(1, "initialized free block list with %d free blocks\n", free_b_count);
 }
 
 // This function searches for a directory entry in a given inode for the specified pathname.
 // If createIfNeeded is true and the directory entry is not found, it creates a new directory entry.
 
-int get_dir_entry(char *pathname, int inodeStartNumber, int *blockNumPtr, bool createIfNeeded)
+int get_dir_entry(char *pathname, int inodeStartNumber, int *b_numPtr, bool createIfNeeded)
 {
     // init variables for loop
     int freeEntryOffset = -1;
-    int freeEntryBlockNum = 0;
-    void *currentBlock;
+    int freeEntryb_num = 0;
+    void *cur_b;
     struct dir_entry *currentEntry;
     struct inode *inode = get_i(inodeStartNumber);
     int i = 0;
-    int blockNum = get_nth_b(inode, i, false);
-    int currBlockNum = 0;
+    int b_num = get_nth_b(inode, i, false);
+    int currb_num = 0;
     int totalSize = sizeof(struct dir_entry);
     bool isFound = false;
 
     // loop through all blocks in inode until the directory entry is found or all blocks have been searched
-    while (blockNum != 0 && !isFound)
+    while (b_num != 0 && !isFound)
     {
-        currentBlock = get_b(blockNum);
-        currentEntry = (struct dir_entry *)currentBlock;
-        while (totalSize <= inode->size && ((char *)currentEntry < ((char *)currentBlock + BLOCKSIZE)))
+        cur_b = get_b(b_num);
+        currentEntry = (struct dir_entry *)cur_b;
+        while (totalSize <= inode->size && ((char *)currentEntry < ((char *)cur_b + BLOCKSIZE)))
         {
             // if a free directory entry is found, remember its offset and block c_item_num
             if (freeEntryOffset == -1 && currentEntry->inum == 0)
             {
-                freeEntryBlockNum = blockNum;
-                freeEntryOffset = (int)((char *)currentEntry - (char *)currentBlock);
+                freeEntryb_num = b_num;
+                freeEntryOffset = (int)((char *)currentEntry - (char *)cur_b);
             }
 
             // compare the directory entry name with specified pathname
@@ -1627,63 +1623,63 @@ int get_dir_entry(char *pathname, int inodeStartNumber, int *blockNumPtr, bool c
         {
             break;
         }
-        currBlockNum = blockNum;
-        blockNum = get_nth_b(inode, ++i, false);
+        currb_num = b_num;
+        b_num = get_nth_b(inode, ++i, false);
     }
 
     // set the block c_item_num pointer to the current block c_item_num
-    *blockNumPtr = blockNum;
+    *b_numPtr = b_num;
 
     // if the directory entry was found, return its offset
     if (isFound)
     {
-        int offset = (int)((char *)currentEntry - (char *)currentBlock);
+        int offset = (int)((char *)currentEntry - (char *)cur_b);
         return offset;
     }
 
     // if we need to create the directory entry and there's free directory entry, use it
     if (createIfNeeded)
     {
-        if (freeEntryBlockNum != 0)
+        if (freeEntryb_num != 0)
         {
-            *blockNumPtr = freeEntryBlockNum;
+            *b_numPtr = freeEntryb_num;
             return freeEntryOffset;
         }
 
         // if there's no free directory entry, create new block and directory entry
         if (inode->size % BLOCKSIZE == 0)
         {
-            blockNum = get_nth_b(inode, i, true);
-            currentBlock = get_b(blockNum);
+            b_num = get_nth_b(inode, i, true);
+            cur_b = get_b(b_num);
             inode->size += sizeof(struct dir_entry);
-            struct dir_entry *newEntry = (struct dir_entry *)currentBlock;
+            struct dir_entry *newEntry = (struct dir_entry *)cur_b;
             newEntry->inum = 0;
 
             // mark the block and inode dirty in the cache
-            cache_item *blockItem = (cache_item *)query_ht(b_ht, blockNum);
+            cache_item *blockItem = (cache_item *)query_ht(b_ht, b_num);
             blockItem->dirty = true;
 
-            cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeStartNumber);
-            inodeItem->dirty = true;
+            cache_item *i_tmp = (cache_item *)query_ht(i_ht, inodeStartNumber);
+            i_tmp->dirty = true;
 
-            *blockNumPtr = blockNum;
+            *b_numPtr = b_num;
             return 0;
         }
 
         // if the current block still has space, add a new directory entry to it
         inode->size += sizeof(struct dir_entry);
-        cache_item *inodeItem = (cache_item *)query_ht(i_ht, inodeStartNumber);
-        inodeItem->dirty = true;
+        cache_item *i_tmp = (cache_item *)query_ht(i_ht, inodeStartNumber);
+        i_tmp->dirty = true;
         currentEntry->inum = 0;
 
         // mark the current block and previous block dirty in the cache
-        cache_item *blockItem = (cache_item *)query_ht(b_ht, currBlockNum);
+        cache_item *blockItem = (cache_item *)query_ht(b_ht, currb_num);
         blockItem->dirty = true;
-        cache_item *tmpBlockItem = (cache_item *)query_ht(b_ht, currBlockNum);
+        cache_item *tmpBlockItem = (cache_item *)query_ht(b_ht, currb_num);
         tmpBlockItem->dirty = true;
 
-        *blockNumPtr = currBlockNum;
-        int offset = (int)((char *)currentEntry - (char *)currentBlock);
+        *b_numPtr = currb_num;
+        int offset = (int)((char *)currentEntry - (char *)cur_b);
         return offset;
     }
 
@@ -1743,12 +1739,12 @@ int get_super_dir(char *pathname, int curr_i, char **filenamePtr)
 
         char *filename = pathname + (sizeof(char) * (lastSlashIndex + 1));
         *filenamePtr = filename;
-        int dirInodeNum = get_path_i_num(path, curr_i);
-        if (dirInodeNum == 0)
+        int dir_i_num = get_path_i_num(path, curr_i);
+        if (dir_i_num == 0)
         {
             return ERROR;
         }
-        return dirInodeNum;
+        return dir_i_num;
     }
     // if there is no slash in the pathname, set the filename pointer and return the current directory's inode c_item_num
     else
