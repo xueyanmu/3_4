@@ -54,7 +54,7 @@ bool is_valid_path_i(char *pathname, int curr_i);
 int change_path_i(char *pathname, int curr_i);
 void set_dir_entry(struct dir_entry *dir_entry, char *filename);
 void set_newdir_i(int i_num, int dir_i_num);
-void clear_file(struct inode *inode, int i_num);
+void clear_file(struct inode *inode);
 
 int handle_create(char *pathname, int curr_i, int new_i_num);
 int handle_open(char *pathname, int curr_i);
@@ -68,7 +68,7 @@ int handle_chdir(char *pathname, int curr_i);
 int handle_stat(char *pathname, int curr_i, struct Stat *stat_buffer, int pid);
 int handle_sync(void);
 int handle_shutdown(void);
-int handle_seek(int i_num, int offset, int whence, int currentPosition);
+int handle_seek(int i_num, int offset, int whence, int cur_pos);
 
 char * get_proc_path(int pid, char *pathname, int len);
 
